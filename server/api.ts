@@ -61,23 +61,23 @@ apiRouter.post('/public/student/register', async (req, res) => {
   if (!batch) { res.status(400).json({ error: 'Selected batch is not available for the selected course.' }); return; }
   const existing = await queryOne<any>(`SELECT id FROM users WHERE LOWER(email)=LOWER(?)`, [String(email).trim()]);
   if (existing) { res.status(409).json({ error: 'An account already exists with this email address.' }); return; }
-  const countRow = await queryOne<{count:number}>(`SELECT COUNT(*) as count FROM students`);
-  const nextNum=(countRow?.count||0)+1;
-  const studentId=`DP-STD-${String(nextNum).padStart(4,'0')}`;
-  const regNo=`DP-GJW-2026-${String(nextNum).padStart(3,'0')}`;
-  const username=studentId.toLowerCase();
-  const hash=bcrypt.hashSync(String(password),10);
-  const studentResult=await execute(`INSERT INTO students (student_id,name,email,mobile,course_id,batch_id,joining_date,status,address,registration_no) VALUES (?,?,?,?,?, ?, CURRENT_DATE,'ACTIVE',?,?)`, [studentId,name.trim(),email.trim(),mobile.trim(),course_id,batch_id,address?.trim()||null,regNo]);
-  const studentDbId=studentResult.lastInsertRowId!;
-  const studentRole=await queryOne<any>(`SELECT id FROM roles WHERE role_name='STUDENT'`);
-  await execute(`INSERT INTO users (name,username,email,password_hash,role_id,mobile,status) VALUES (?,?,?,?,?,?, 'ACTIVE')`, [name.trim(),username,email.trim(),hash,studentRole?.id,mobile.trim()]);
-  const userRow=await queryOne<any>(`SELECT id FROM users WHERE username=?`,[username]);
-  if (userRow) await execute(`UPDATE students SET user_id=? WHERE id=?`,[userRow.id,studentDbId]);
-  const message=`New student registration: ${name.trim()} (${studentId}) for ${batch.batch_name} (${batch.batch_code}). Please review the registration.`;
-  await execute(`INSERT INTO notifications (user_id,target_role,title,message,is_read) VALUES (?,?,?,?,0)`,[batch.faculty_id,null,'New Student Registration',message]);
-  for (const role of ['ADMIN','COUNSELLOR','TEAM_LEAD']) await execute(`INSERT INTO notifications (user_id,target_role,title,message,is_read) VALUES (NULL,?,?,?,0)`,[role,'New Student Registration',message]);
-  logActivity(null,name.trim(),'STUDENT','STUDENT_REGISTER',message);
-  res.status(201).json({message:'Registration successful.',student_id:studentId,username});
+  const countRow = await queryOne<{ count: number }>(`SELECT COUNT(*) as count FROM students`);
+  const nextNum = (countRow?.count || 0) + 1;
+  const studentId = `DP-STD-${String(nextNum).padStart(4, '0')}`;
+  const regNo = `DP-GJW-2026-${String(nextNum).padStart(3, '0')}`;
+  const username = studentId.toLowerCase();
+  const hash = bcrypt.hashSync(String(password), 10);
+  const studentResult = await execute(`INSERT INTO students (student_id,name,email,mobile,course_id,batch_id,joining_date,status,address,registration_no) VALUES (?,?,?,?,?, ?, CURRENT_DATE,'ACTIVE',?,?)`, [studentId, name.trim(), email.trim(), mobile.trim(), course_id, batch_id, address?.trim() || null, regNo]);
+  const studentDbId = studentResult.lastInsertRowId!;
+  const studentRole = await queryOne<any>(`SELECT id FROM roles WHERE role_name='STUDENT'`);
+  await execute(`INSERT INTO users (name,username,email,password_hash,role_id,mobile,status) VALUES (?,?,?,?,?,?, 'ACTIVE')`, [name.trim(), username, email.trim(), hash, studentRole?.id, mobile.trim()]);
+  const userRow = await queryOne<any>(`SELECT id FROM users WHERE username=?`, [username]);
+  if (userRow) await execute(`UPDATE students SET user_id=? WHERE id=?`, [userRow.id, studentDbId]);
+  const message = `New student registration: ${name.trim()} (${studentId}) for ${batch.batch_name} (${batch.batch_code}). Please review the registration.`;
+  await execute(`INSERT INTO notifications (user_id,target_role,title,message,is_read) VALUES (?,?,?,?,0)`, [batch.faculty_id, null, 'New Student Registration', message]);
+  for (const role of ['ADMIN', 'COUNSELLOR', 'TEAM_LEAD']) await execute(`INSERT INTO notifications (user_id,target_role,title,message,is_read) VALUES (NULL,?,?,?,0)`, [role, 'New Student Registration', message]);
+  logActivity(null, name.trim(), 'STUDENT', 'STUDENT_REGISTER', message);
+  res.status(201).json({ message: 'Registration successful.', student_id: studentId, username });
 });
 
 apiRouter.post('/auth/login', async (req, res) => {
@@ -153,35 +153,35 @@ apiRouter.post('/auth/login', async (req, res) => {
 
 
 apiRouter.get('/student/me', authenticateToken, requireRole(['STUDENT']), async (req: AuthenticatedRequest, res: Response) => {
-  const student=await queryOne<any>(`SELECT s.*, c.course_name, c.course_code, b.batch_name, b.batch_code, b.timing, u.username FROM students s JOIN courses c ON s.course_id=c.id JOIN batches b ON s.batch_id=b.id JOIN users u ON s.user_id=u.id WHERE s.user_id=?`,[req.user!.id]);
-  if(!student){res.status(404).json({error:'Student profile not found.'});return;}
-  res.json({student});
+  const student = await queryOne<any>(`SELECT s.*, c.course_name, c.course_code, b.batch_name, b.batch_code, b.timing, u.username FROM students s JOIN courses c ON s.course_id=c.id JOIN batches b ON s.batch_id=b.id JOIN users u ON s.user_id=u.id WHERE s.user_id=?`, [req.user!.id]);
+  if (!student) { res.status(404).json({ error: 'Student profile not found.' }); return; }
+  res.json({ student });
 });
 
 
 apiRouter.get('/student/examinations', authenticateToken, requireRole(['STUDENT']), async (req: AuthenticatedRequest, res: Response) => {
-  const student=await queryOne<any>('SELECT id,batch_id,course_id FROM students WHERE user_id=?',[req.user!.id]);
-  if(!student){res.status(404).json({error:'Student profile not found.'});return;}
-  const examinations=await queryAll<any>(`SELECT e.id,e.exam_id,e.title,e.subject,e.exam_type,e.exam_date,e.duration,e.total_marks,e.number_of_questions,e.status,e.created_at,e.file_name,
+  const student = await queryOne<any>('SELECT id,batch_id,course_id FROM students WHERE user_id=?', [req.user!.id]);
+  if (!student) { res.status(404).json({ error: 'Student profile not found.' }); return; }
+  const examinations = await queryAll<any>(`SELECT e.id,e.exam_id,e.title,e.subject,e.exam_type,e.exam_date,e.duration,e.total_marks,e.number_of_questions,e.status,e.created_at,e.file_name,
     c.course_name,b.batch_name,b.batch_code,u.name as faculty_name
     FROM examinations e JOIN courses c ON c.id=e.course_id JOIN batches b ON b.id=e.batch_id JOIN users u ON u.id=e.trainer_id
-    WHERE e.batch_id=? AND e.course_id=? ORDER BY e.created_at DESC`,[student.batch_id,student.course_id]);
-  res.json({examinations});
+    WHERE e.batch_id=? AND e.course_id=? ORDER BY e.created_at DESC`, [student.batch_id, student.course_id]);
+  res.json({ examinations });
 });
 
 apiRouter.get('/student/online-exams', authenticateToken, requireRole(['STUDENT']), async (req: AuthenticatedRequest, res: Response) => {
-  const student=await queryOne<any>(`SELECT id FROM students WHERE user_id=?`,[req.user!.id]);
-  if(!student){res.status(404).json({error:'Student profile not found.'});return;}
-  const exams=await queryAll<any>(`SELECT a.id as assignment_id,a.access_token,oe.exam_code,oe.title,oe.topics,oe.duration_minutes,oe.total_marks,oe.passing_marks,oe.status,oe.created_at, c.course_name,b.batch_name, at.status as attempt_status,at.score,at.submitted_at FROM online_exam_assignments a JOIN online_exams oe ON oe.id=a.online_exam_id JOIN courses c ON c.id=oe.course_id JOIN batches b ON b.id=oe.batch_id LEFT JOIN online_exam_attempts at ON at.assignment_id=a.id WHERE a.student_id=? AND oe.status='PUBLISHED' ORDER BY oe.created_at DESC`,[student.id]);
-  const base=(process.env.APP_URL||`${req.protocol}://${req.get('host')}`).replace(/\/$/,'');
-  res.json({exams:exams.map((e:any)=>({...e,exam_link:`${base}/exam/${e.access_token}`}))});
+  const student = await queryOne<any>(`SELECT id FROM students WHERE user_id=?`, [req.user!.id]);
+  if (!student) { res.status(404).json({ error: 'Student profile not found.' }); return; }
+  const exams = await queryAll<any>(`SELECT a.id as assignment_id,a.access_token,oe.exam_code,oe.title,oe.topics,oe.duration_minutes,oe.total_marks,oe.passing_marks,oe.status,oe.created_at, c.course_name,b.batch_name, at.status as attempt_status,at.score,at.submitted_at FROM online_exam_assignments a JOIN online_exams oe ON oe.id=a.online_exam_id JOIN courses c ON c.id=oe.course_id JOIN batches b ON b.id=oe.batch_id LEFT JOIN online_exam_attempts at ON at.assignment_id=a.id WHERE a.student_id=? AND oe.status='PUBLISHED' ORDER BY oe.created_at DESC`, [student.id]);
+  const base = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  res.json({ exams: exams.map((e: any) => ({ ...e, exam_link: `${base}/exam/${e.access_token}` })) });
 });
 
 apiRouter.get('/student/results', authenticateToken, requireRole(['STUDENT']), async (req: AuthenticatedRequest, res: Response) => {
-  const student=await queryOne<any>(`SELECT id FROM students WHERE user_id=?`,[req.user!.id]);
-  if(!student){res.status(404).json({error:'Student profile not found.'});return;}
-  const results=await queryAll<any>(`SELECT at.id as attempt_id,oe.exam_code,oe.title,oe.total_marks,oe.passing_marks,at.score,at.correct_answers,at.wrong_answers,at.unanswered,at.submitted_at,at.status FROM online_exam_attempts at JOIN online_exam_assignments a ON a.id=at.assignment_id JOIN online_exams oe ON oe.id=a.online_exam_id WHERE a.student_id=? ORDER BY at.submitted_at DESC`,[student.id]);
-  res.json({results});
+  const student = await queryOne<any>(`SELECT id FROM students WHERE user_id=?`, [req.user!.id]);
+  if (!student) { res.status(404).json({ error: 'Student profile not found.' }); return; }
+  const results = await queryAll<any>(`SELECT at.id as attempt_id,oe.exam_code,oe.title,oe.total_marks,oe.passing_marks,at.score,at.correct_answers,at.wrong_answers,at.unanswered,at.submitted_at,at.status FROM online_exam_attempts at JOIN online_exam_assignments a ON a.id=at.assignment_id JOIN online_exams oe ON oe.id=a.online_exam_id WHERE a.student_id=? ORDER BY at.submitted_at DESC`, [student.id]);
+  res.json({ results });
 });
 
 apiRouter.post('/auth/logout', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
@@ -265,7 +265,7 @@ apiRouter.put('/auth/profile', authenticateToken, async (req: AuthenticatedReque
 
 apiRouter.get('/stats/dashboard', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const user = req.user!;
-  
+
   if (user.role === 'FACULTY') {
     // Trainer specific statistics
     const coursesCount = (await queryOne<{ count: number }>(
@@ -619,12 +619,12 @@ apiRouter.put('/trainers/:id', authenticateToken, requireRole(['CENTER_MANAGER',
   res.json({ message: 'Trainer details updated successfully.' });
 });
 
-apiRouter.delete('/trainers/:id', authenticateToken, requireRole(['CENTER_MANAGER','TEAM_LEAD','ADMIN']), async (req: AuthenticatedRequest,res: Response)=>{
-  const id=Number(req.params.id); const target=await queryOne<any>(`SELECT id,name FROM users WHERE id=? AND role_id=(SELECT id FROM roles WHERE role_name='FACULTY')`,[id]);
-  if(!target){res.status(404).json({error:'Faculty not found.'});return;}
-  await execute(`UPDATE users SET status='INACTIVE', updated_at=CURRENT_TIMESTAMP WHERE id=? AND role_id=(SELECT id FROM roles WHERE role_name='FACULTY')`,[id]);
-  logActivity(req.user!.id,req.user!.name,req.user!.role,'FACULTY_DELETE',`Deactivated faculty ${target.name} (ID ${id}).`);
-  res.json({message:'Faculty deactivated successfully.'});
+apiRouter.delete('/trainers/:id', authenticateToken, requireRole(['CENTER_MANAGER', 'TEAM_LEAD', 'ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+  const id = Number(req.params.id); const target = await queryOne<any>(`SELECT id,name FROM users WHERE id=? AND role_id=(SELECT id FROM roles WHERE role_name='FACULTY')`, [id]);
+  if (!target) { res.status(404).json({ error: 'Faculty not found.' }); return; }
+  await execute(`UPDATE users SET status='INACTIVE', updated_at=CURRENT_TIMESTAMP WHERE id=? AND role_id=(SELECT id FROM roles WHERE role_name='FACULTY')`, [id]);
+  logActivity(req.user!.id, req.user!.name, req.user!.role, 'FACULTY_DELETE', `Deactivated faculty ${target.name} (ID ${id}).`);
+  res.json({ message: 'Faculty deactivated successfully.' });
 });
 
 apiRouter.post('/trainers/:id/reset-password', authenticateToken, requireRole(['CENTER_MANAGER', 'TEAM_LEAD', 'ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
@@ -957,9 +957,9 @@ apiRouter.get('/examinations/:id/download', authenticateToken, async (req: Authe
     return;
   }
   if (user.role === 'STUDENT') {
-    const student=await queryOne<any>('SELECT id,batch_id,course_id FROM students WHERE user_id=?',[user.id]);
-    if(!student || Number(exam.batch_id)!==Number(student.batch_id) || Number(exam.course_id)!==Number(student.course_id)) {
-      res.status(403).json({error:'You are not authorized to access this examination paper.'}); return;
+    const student = await queryOne<any>('SELECT id,batch_id,course_id FROM students WHERE user_id=?', [user.id]);
+    if (!student || Number(exam.batch_id) !== Number(student.batch_id) || Number(exam.course_id) !== Number(student.course_id)) {
+      res.status(403).json({ error: 'You are not authorized to access this examination paper.' }); return;
     }
   }
 
@@ -1080,7 +1080,7 @@ apiRouter.post('/online-exams/parse-pdf', authenticateToken, requireRole(['FACUL
   if (!file) return res.status(400).json({ error: 'Please upload a PDF question paper.' });
   const ext = path.extname(file.originalname || file.path).toLowerCase();
   if (ext !== '.pdf' && file.mimetype !== 'application/pdf') {
-    try { fs.unlinkSync(file.path); } catch {}
+    try { fs.unlinkSync(file.path); } catch { }
     return res.status(400).json({ error: 'Only PDF question papers can be converted into an online exam.' });
   }
 
@@ -1092,7 +1092,7 @@ apiRouter.post('/online-exams/parse-pdf', authenticateToken, requireRole(['FACUL
     try {
       text = execFileSync('pdftotext', ['-layout', file.path, '-'], { encoding: 'utf8', maxBuffer: 30 * 1024 * 1024 });
       extractionMethod = 'pdftotext';
-    } catch {}
+    } catch { }
 
     // Pure JavaScript fallback for text-based PDFs. This avoids requiring pdftotext on Windows.
     if (!text.trim()) {
@@ -1148,7 +1148,7 @@ apiRouter.post('/online-exams/parse-pdf', authenticateToken, requireRole(['FACUL
     const pushCurrent = () => {
       if (!current) return;
       current.question_text = String(current.question_text || '').trim();
-      for (const k of ['A','B','C','D']) current['option_' + k.toLowerCase()] = String(current['option_' + k.toLowerCase()] || '').trim();
+      for (const k of ['A', 'B', 'C', 'D']) current['option_' + k.toLowerCase()] = String(current['option_' + k.toLowerCase()] || '').trim();
       if (current.question_text && current.option_a && current.option_b && current.option_c && current.option_d) questions.push(current);
       current = null;
       currentOption = null;
@@ -1182,8 +1182,8 @@ apiRouter.post('/online-exams/parse-pdf', authenticateToken, requireRole(['FACUL
         pushCurrent();
         current = {
           topic: String(req.body?.topics || 'General').split(',')[0].trim() || 'General',
-          question_text: qmatch[2].trim(), option_a:'', option_b:'', option_c:'', option_d:'',
-          correct_option:'', marks:1, source_number:Number(qmatch[1])
+          question_text: qmatch[2].trim(), option_a: '', option_b: '', option_c: '', option_d: '',
+          correct_option: '', marks: 1, source_number: Number(qmatch[1])
         };
         currentOption = null;
       } else if (omatch && current) {
@@ -1214,7 +1214,7 @@ apiRouter.post('/online-exams/parse-pdf', authenticateToken, requireRole(['FACUL
       });
     }
 
-    const missingAnswers = questions.filter(q => !['A','B','C','D'].includes(q.correct_option)).length;
+    const missingAnswers = questions.filter(q => !['A', 'B', 'C', 'D'].includes(q.correct_option)).length;
     const inferredTitle = path.basename(file.originalname, '.pdf').replace(/[_-]+/g, ' ').trim();
 
     return res.json({
@@ -1233,7 +1233,7 @@ apiRouter.post('/online-exams/parse-pdf', authenticateToken, requireRole(['FACUL
     console.error('PDF parse error:', error);
     return res.status(500).json({ error: `PDF processing failed: ${error?.message || 'Unknown error'}`, code: 'PDF_PARSE_FAILED' });
   } finally {
-    try { fs.unlinkSync(file.path); } catch {}
+    try { fs.unlinkSync(file.path); } catch { }
   }
 });
 
@@ -1250,16 +1250,16 @@ apiRouter.post('/online-exams', authenticateToken, requireRole(['FACULTY']), asy
   const cleanQuestions = questions.map((q: any, i: number) => ({
     topic: String(q.topic || '').trim(), question_text: String(q.question_text || '').trim(), option_a: String(q.option_a || '').trim(), option_b: String(q.option_b || '').trim(), option_c: String(q.option_c || '').trim(), option_d: String(q.option_d || '').trim(), correct_option: String(q.correct_option || '').toUpperCase(), marks: Math.max(1, Number(q.marks) || 1), order: i + 1
   }));
-  if (cleanQuestions.some((q: any) => !q.topic || !q.question_text || !q.option_a || !q.option_b || !q.option_c || !q.option_d || !['A','B','C','D'].includes(q.correct_option))) { res.status(400).json({ error: 'Every question must have a topic, question, four options, and a valid correct option.' }); return; }
+  if (cleanQuestions.some((q: any) => !q.topic || !q.question_text || !q.option_a || !q.option_b || !q.option_c || !q.option_d || !['A', 'B', 'C', 'D'].includes(q.correct_option))) { res.status(400).json({ error: 'Every question must have a topic, question, four options, and a valid correct option.' }); return; }
   const totalQuestionMarks = cleanQuestions.reduce((sum: number, q: any) => sum + q.marks, 0);
   const finalTotalMarks = Number(total_marks) > 0 ? Number(total_marks) : totalQuestionMarks;
   const code = `ONL-${new Date().getFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
   const result = await execute(`INSERT INTO online_exams (exam_code,title,course_id,batch_id,trainer_id,topics,duration_minutes,total_marks,passing_marks,instructions,status) VALUES (?,?,?,?,?,?,?,?,?,?, 'DRAFT')`, [code, String(title).trim(), courseId, batchId, user.id, String(topics).trim(), Math.min(300, Math.max(1, Number(duration_minutes) || 30)), finalTotalMarks, Math.max(0, Number(passing_marks) || 0), String(instructions || '').trim()]);
   const examId = Number(result.lastInsertRowId);
-  for (const q of cleanQuestions) await execute(`INSERT INTO online_exam_questions (online_exam_id,topic,question_text,option_a,option_b,option_c,option_d,correct_option,marks,question_order) VALUES (?,?,?,?,?,?,?,?,?,?)`, [examId,q.topic,q.question_text,q.option_a,q.option_b,q.option_c,q.option_d,q.correct_option,q.marks,q.order]);
+  for (const q of cleanQuestions) await execute(`INSERT INTO online_exam_questions (online_exam_id,topic,question_text,option_a,option_b,option_c,option_d,correct_option,marks,question_order) VALUES (?,?,?,?,?,?,?,?,?,?)`, [examId, q.topic, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option, q.marks, q.order]);
   const students = await queryAll<any>('SELECT id FROM students WHERE batch_id = ? AND status = \'ACTIVE\'', [batchId]);
   for (const st of students) await execute(`INSERT INTO online_exam_assignments (online_exam_id,student_id,access_token) VALUES (?,?,?)`, [examId, st.id, crypto.randomBytes(24).toString('hex')]);
-  logActivity(user.id,user.name,user.role,'ONLINE_EXAM_CREATE',`Created online exam ${code} for batch ${batchId} with ${cleanQuestions.length} questions.`);
+  logActivity(user.id, user.name, user.role, 'ONLINE_EXAM_CREATE', `Created online exam ${code} for batch ${batchId} with ${cleanQuestions.length} questions.`);
   res.status(201).json({ message: 'Online exam created and assigned to active batch students.', online_exam_id: examId, exam_code: code, assignment_count: students.length });
 });
 
@@ -1314,7 +1314,7 @@ apiRouter.post('/online-exams/:id/publish', authenticateToken, requireRole(['FAC
     await syncPublishedExamAssignments(Number(exam.id));
     logActivity(req.user!.id, req.user!.name, 'FACULTY', 'ONLINE_EXAM_PUBLISHED', `Published ${exam.exam_code} and synchronized secure student exam links.`);
     res.json({ message: 'Online exam published and student exam links updated.', exam_id: exam.id });
-  } catch (e:any) {
+  } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Online exam publication failed.' });
   }
 });
@@ -1393,7 +1393,7 @@ apiRouter.get('/public/online-exams/:token', async (req, res) => {
     JOIN courses c ON c.id=oe.course_id JOIN batches b ON b.id=oe.batch_id WHERE a.access_token=?`, [req.params.token]);
   if (!a || a.status !== 'PUBLISHED') { res.status(404).json({ error: 'This exam link is invalid, not published, or has been closed.' }); return; }
   const questions = await queryAll<any>(`SELECT id,topic,question_text,option_a,option_b,option_c,option_d,marks,question_order FROM online_exam_questions WHERE online_exam_id=? ORDER BY question_order`, [a.online_exam_id]);
-  res.json({ exam_code:a.exam_code,title:a.title,student_name:a.student_name,student_code:a.student_code,course_name:a.course_name,batch_name:a.batch_name,topics:a.topics,duration_minutes:a.duration_minutes,total_marks:a.total_marks,passing_marks:a.passing_marks,instructions:a.instructions,questions });
+  res.json({ exam_code: a.exam_code, title: a.title, student_name: a.student_name, student_code: a.student_code, course_name: a.course_name, batch_name: a.batch_name, topics: a.topics, duration_minutes: a.duration_minutes, total_marks: a.total_marks, passing_marks: a.passing_marks, instructions: a.instructions, questions });
 });
 
 apiRouter.post('/public/online-exams/:token/start', async (req, res) => {
@@ -1402,13 +1402,28 @@ apiRouter.post('/public/online-exams/:token/start', async (req, res) => {
   const existing = await queryOne<any>('SELECT * FROM online_exam_attempts WHERE assignment_id=?', [a.id]);
   if (existing) {
     if (existing.status === 'SUBMITTED') { res.status(409).json({ error: 'This examination has already been submitted.' }); return; }
-    const expires = new Date(new Date(existing.started_at).getTime() + durationMinutesFromExam(a)*60000).toISOString();
+    const expires = new Date(new Date(existing.started_at).getTime() + durationMinutesFromExam(a) * 60000).toISOString();
     if (Date.now() >= new Date(expires).getTime()) { await execute(`UPDATE online_exam_attempts SET status='SUBMITTED', submitted_at=CURRENT_TIMESTAMP WHERE id=?`, [existing.id]); res.status(409).json({ error: 'The examination time has expired.' }); return; }
     res.json({ attempt_id: existing.id, started_at: existing.started_at, expires_at: expires }); return;
   }
   const result = await execute(`INSERT INTO online_exam_attempts (assignment_id,started_at,status) VALUES (?,CURRENT_TIMESTAMP,'IN_PROGRESS')`, [a.id]);
   const started = await queryOne<any>('SELECT started_at FROM online_exam_attempts WHERE id=?', [result.lastInsertRowId]);
-  const expires = new Date(new Date(`${started.started_at.replace(' ','T')}Z`).getTime() + durationMinutesFromExam(a)*60000).toISOString();
+
+  const startedAt =
+    started.started_at instanceof Date
+      ? started.started_at
+      : new Date(started.started_at);
+
+  if (Number.isNaN(startedAt.getTime())) {
+    throw new Error(
+      `Invalid started_at timestamp: ${String(started.started_at)}`
+    );
+  }
+
+  const expires = new Date(
+    startedAt.getTime() + durationMinutesFromExam(a) * 60_000
+  ).toISOString();
+
   res.json({ attempt_id: result.lastInsertRowId, started_at: started.started_at, expires_at: expires });
 });
 
@@ -1438,7 +1453,7 @@ apiRouter.post('/public/online-exams/:token/submit', async (req, res) => {
     return;
   }
 
-  const startedMs = new Date(`${attempt.started_at.replace(' ','T')}Z`).getTime();
+  const startedMs = new Date(`${attempt.started_at.replace(' ', 'T')}Z`).getTime();
   const expired = Date.now() >= startedMs + durationMinutesFromExam(a) * 60000;
   const autoSubmit = req.body?.auto_submit === true;
   const answers = req.body?.answers && typeof req.body.answers === 'object' ? req.body.answers : {};
@@ -1561,65 +1576,65 @@ apiRouter.post('/public/online-exams/:token/submit', async (req, res) => {
 // -------------------------------------------------------------
 // FACULTY ATTENDANCE
 // -------------------------------------------------------------
-apiRouter.get('/attendance', authenticateToken, requireRole(['FACULTY','CENTER_MANAGER','ADMIN','TEAM_LEAD','COUNSELLOR','ADMIN']), async (req: AuthenticatedRequest,res: Response)=>{
-  const batchId=Number(req.query.batch_id||0), date=String(req.query.date||'');
-  if(!batchId||!date){res.status(400).json({error:'batch_id and date are required.'});return;}
-  if(req.user!.role==='FACULTY'){
-    const own=await queryOne(`SELECT id FROM batches WHERE id=? AND trainer_id=?`,[batchId,req.user!.id]); if(!own){res.status(403).json({error:'You can only maintain attendance for your assigned batches.'});return;}
+apiRouter.get('/attendance', authenticateToken, requireRole(['FACULTY', 'CENTER_MANAGER', 'ADMIN', 'TEAM_LEAD', 'COUNSELLOR', 'ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+  const batchId = Number(req.query.batch_id || 0), date = String(req.query.date || '');
+  if (!batchId || !date) { res.status(400).json({ error: 'batch_id and date are required.' }); return; }
+  if (req.user!.role === 'FACULTY') {
+    const own = await queryOne(`SELECT id FROM batches WHERE id=? AND trainer_id=?`, [batchId, req.user!.id]); if (!own) { res.status(403).json({ error: 'You can only maintain attendance for your assigned batches.' }); return; }
   }
-  const students=await queryAll<any>(`SELECT s.id,s.student_id,s.name,s.email,s.mobile,ar.status as attendance_status,ar.remarks FROM students s LEFT JOIN attendance_records ar ON ar.student_id=s.id AND ar.attendance_date=? WHERE s.batch_id=? AND s.status='ACTIVE' ORDER BY s.name`,[date,batchId]);
-  res.json({students});
+  const students = await queryAll<any>(`SELECT s.id,s.student_id,s.name,s.email,s.mobile,ar.status as attendance_status,ar.remarks FROM students s LEFT JOIN attendance_records ar ON ar.student_id=s.id AND ar.attendance_date=? WHERE s.batch_id=? AND s.status='ACTIVE' ORDER BY s.name`, [date, batchId]);
+  res.json({ students });
 });
 
-apiRouter.post('/attendance/bulk', authenticateToken, requireRole(['FACULTY']), async (req: AuthenticatedRequest,res: Response)=>{
-  const {batch_id,attendance_date,records}=req.body||{};
-  const batch=await queryOne<any>(`SELECT id,batch_name,batch_code FROM batches WHERE id=? AND trainer_id=?`,[batch_id,req.user!.id]);
-  if(!batch){res.status(403).json({error:'You can only maintain attendance for your assigned batches.'});return;}
-  if(!attendance_date||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(attendance_date))||!Array.isArray(records)){res.status(400).json({error:'Valid attendance date and attendance records are required.'});return;}
-  if(!records.length){res.status(400).json({error:'No active students were loaded for this batch and date.'});return;}
-  const allowed=await queryAll<any>(`SELECT id FROM students WHERE batch_id=? AND status='ACTIVE'`,[batch_id]);
-  const allowedIds=new Set(allowed.map((s:any)=>Number(s.id)));
-  for(const r of records){
-    const studentId=Number(r.student_id);
-    if(!allowedIds.has(studentId)) continue;
-    await execute(`INSERT INTO attendance_records(student_id,batch_id,attendance_date,status,remarks,marked_by) VALUES(?,?,?,?,?,?) ON CONFLICT(student_id,attendance_date) DO UPDATE SET batch_id=excluded.batch_id,status=excluded.status,remarks=excluded.remarks,marked_by=excluded.marked_by`,[studentId,batch_id,attendance_date,['PRESENT','ABSENT','LEAVE'].includes(r.status)?r.status:'PRESENT',r.remarks||null,req.user!.id]);
+apiRouter.post('/attendance/bulk', authenticateToken, requireRole(['FACULTY']), async (req: AuthenticatedRequest, res: Response) => {
+  const { batch_id, attendance_date, records } = req.body || {};
+  const batch = await queryOne<any>(`SELECT id,batch_name,batch_code FROM batches WHERE id=? AND trainer_id=?`, [batch_id, req.user!.id]);
+  if (!batch) { res.status(403).json({ error: 'You can only maintain attendance for your assigned batches.' }); return; }
+  if (!attendance_date || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(attendance_date)) || !Array.isArray(records)) { res.status(400).json({ error: 'Valid attendance date and attendance records are required.' }); return; }
+  if (!records.length) { res.status(400).json({ error: 'No active students were loaded for this batch and date.' }); return; }
+  const allowed = await queryAll<any>(`SELECT id FROM students WHERE batch_id=? AND status='ACTIVE'`, [batch_id]);
+  const allowedIds = new Set(allowed.map((s: any) => Number(s.id)));
+  for (const r of records) {
+    const studentId = Number(r.student_id);
+    if (!allowedIds.has(studentId)) continue;
+    await execute(`INSERT INTO attendance_records(student_id,batch_id,attendance_date,status,remarks,marked_by) VALUES(?,?,?,?,?,?) ON CONFLICT(student_id,attendance_date) DO UPDATE SET batch_id=excluded.batch_id,status=excluded.status,remarks=excluded.remarks,marked_by=excluded.marked_by`, [studentId, batch_id, attendance_date, ['PRESENT', 'ABSENT', 'LEAVE'].includes(r.status) ? r.status : 'PRESENT', r.remarks || null, req.user!.id]);
   }
-  res.json({message:`Attendance saved successfully for ${allowedIds.size} active students.`,count:records.length,batch:batch.batch_name,date:attendance_date});
+  res.json({ message: `Attendance saved successfully for ${allowedIds.size} active students.`, count: records.length, batch: batch.batch_name, date: attendance_date });
 });
 
-apiRouter.post('/attendance/submit', authenticateToken, requireRole(['FACULTY']), attendanceUpload.single('attendance_file'), async (req: AuthenticatedRequest,res: Response)=>{
-  const {batch_id,attendance_date}=req.body||{};
-  const file_name=(req as any).file?.originalname || null;
-  const file_path=(req as any).file?.path || null;
-  if(!attendance_date||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(attendance_date))){res.status(400).json({error:'A valid attendance date is required.'});return;}
-  if(!file_path){res.status(400).json({error:'Attendance Excel file was not received.'});return;}
-  const batch=await queryOne<any>(`SELECT b.id,b.batch_name,b.batch_code FROM batches b WHERE b.id=? AND b.trainer_id=?`,[batch_id,req.user!.id]);
-  if(!batch){res.status(403).json({error:'You can only submit attendance for your assigned batches.'});return;}
-  await execute(`INSERT INTO attendance_submissions(batch_id,attendance_date,faculty_id,file_name,file_path) VALUES(?,?,?,?,?)`,[batch_id,attendance_date,req.user!.id,file_name,file_path]);
-  const msg=`Attendance submitted by ${req.user!.name} for ${batch.batch_name} (${batch.batch_code}) for ${attendance_date}. Excel file: ${file_name||'not attached'}.`;
-  for(const role of ['CENTER_MANAGER','ADMIN','TEAM_LEAD']) await execute(`INSERT INTO notifications(user_id,target_role,title,message,is_read) VALUES(NULL,?,?,?,0)`,[role,'Attendance Submission',msg]);
-  logActivity(req.user!.id,req.user!.name,'FACULTY','ATTENDANCE_SUBMIT',msg);
-  res.json({message:'Attendance submitted to Center Manager, Admin and Team Lead.'});
+apiRouter.post('/attendance/submit', authenticateToken, requireRole(['FACULTY']), attendanceUpload.single('attendance_file'), async (req: AuthenticatedRequest, res: Response) => {
+  const { batch_id, attendance_date } = req.body || {};
+  const file_name = (req as any).file?.originalname || null;
+  const file_path = (req as any).file?.path || null;
+  if (!attendance_date || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(attendance_date))) { res.status(400).json({ error: 'A valid attendance date is required.' }); return; }
+  if (!file_path) { res.status(400).json({ error: 'Attendance Excel file was not received.' }); return; }
+  const batch = await queryOne<any>(`SELECT b.id,b.batch_name,b.batch_code FROM batches b WHERE b.id=? AND b.trainer_id=?`, [batch_id, req.user!.id]);
+  if (!batch) { res.status(403).json({ error: 'You can only submit attendance for your assigned batches.' }); return; }
+  await execute(`INSERT INTO attendance_submissions(batch_id,attendance_date,faculty_id,file_name,file_path) VALUES(?,?,?,?,?)`, [batch_id, attendance_date, req.user!.id, file_name, file_path]);
+  const msg = `Attendance submitted by ${req.user!.name} for ${batch.batch_name} (${batch.batch_code}) for ${attendance_date}. Excel file: ${file_name || 'not attached'}.`;
+  for (const role of ['CENTER_MANAGER', 'ADMIN', 'TEAM_LEAD']) await execute(`INSERT INTO notifications(user_id,target_role,title,message,is_read) VALUES(NULL,?,?,?,0)`, [role, 'Attendance Submission', msg]);
+  logActivity(req.user!.id, req.user!.name, 'FACULTY', 'ATTENDANCE_SUBMIT', msg);
+  res.json({ message: 'Attendance submitted to Center Manager, Admin and Team Lead.' });
 });
 
 
 
-apiRouter.get('/attendance/submissions', authenticateToken, requireRole(['CENTER_MANAGER','ADMIN','TEAM_LEAD','ADMIN']), async (req: AuthenticatedRequest,res: Response)=>{
-  const rows=await queryAll<any>(`SELECT a.id,a.batch_id,a.attendance_date,a.faculty_id,a.file_name,a.file_path,a.submitted_at,
+apiRouter.get('/attendance/submissions', authenticateToken, requireRole(['CENTER_MANAGER', 'ADMIN', 'TEAM_LEAD', 'ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+  const rows = await queryAll<any>(`SELECT a.id,a.batch_id,a.attendance_date,a.faculty_id,a.file_name,a.file_path,a.submitted_at,
     b.batch_name,b.batch_code,c.course_name,u.name as faculty_name
     FROM attendance_submissions a
     JOIN batches b ON b.id=a.batch_id
     JOIN courses c ON c.id=b.course_id
     JOIN users u ON u.id=a.faculty_id
     ORDER BY a.submitted_at DESC`);
-  res.json({submissions:rows.map(r=>({...r,download_url:`/api/attendance-submissions/${r.id}/download`}))});
+  res.json({ submissions: rows.map(r => ({ ...r, download_url: `/api/attendance-submissions/${r.id}/download` })) });
 });
 
-apiRouter.get('/attendance-submissions/:id/download', authenticateToken, requireRole(['CENTER_MANAGER','ADMIN','TEAM_LEAD','ADMIN','FACULTY']), async (req: AuthenticatedRequest,res: Response)=>{
-  const row=await queryOne<any>(`SELECT * FROM attendance_submissions WHERE id=?`,[Number(req.params.id)]);
-  if(!row||!row.file_path||!fs.existsSync(row.file_path)){res.status(404).json({error:'Attendance Excel file not found.'});return;}
-  if(req.user!.role==='FACULTY' && Number(row.faculty_id)!==req.user!.id){res.status(403).json({error:'Unauthorized.'});return;}
-  res.download(row.file_path,row.file_name||'attendance.xls');
+apiRouter.get('/attendance-submissions/:id/download', authenticateToken, requireRole(['CENTER_MANAGER', 'ADMIN', 'TEAM_LEAD', 'ADMIN', 'FACULTY']), async (req: AuthenticatedRequest, res: Response) => {
+  const row = await queryOne<any>(`SELECT * FROM attendance_submissions WHERE id=?`, [Number(req.params.id)]);
+  if (!row || !row.file_path || !fs.existsSync(row.file_path)) { res.status(404).json({ error: 'Attendance Excel file not found.' }); return; }
+  if (req.user!.role === 'FACULTY' && Number(row.faculty_id) !== req.user!.id) { res.status(403).json({ error: 'Unauthorized.' }); return; }
+  res.download(row.file_path, row.file_name || 'attendance.xls');
 });
 
 // -------------------------------------------------------------
