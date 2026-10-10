@@ -1791,62 +1791,176 @@ apiRouter.put('/users/:id/status', authenticateToken, requireRole(['ADMIN']), as
 // REPORTS (Section 21)
 // -------------------------------------------------------------
 
-apiRouter.get('/reports', authenticateToken, requireRole(['ADMIN', 'CENTER_MANAGER', 'TEAM_LEAD']), async (_req, res) => {
-  // Course-wise students & examinations
-  const courseReports = await queryAll(
-    `SELECT c.id, c.course_name, c.course_code, c.duration,
-            COUNT(DISTINCT s.id) as total_students,
-            COUNT(DISTINCT b.id) as total_batches,
-            COUNT(DISTINCT e.id) as total_examinations
-     FROM courses c
-     LEFT JOIN students s ON s.course_id = c.id
-     LEFT JOIN batches b ON b.course_id = c.id
-     LEFT JOIN examinations e ON e.course_id = c.id
-     GROUP BY c.id
-     ORDER BY total_students DESC`
-  );
+// apiRouter.get('/reports', authenticateToken, requireRole(['ADMIN', 'CENTER_MANAGER', 'TEAM_LEAD']), async (_req, res) => {
+//   // Course-wise students & examinations
+//   const courseReports = await queryAll(
+//     `SELECT c.id, c.course_name, c.course_code, c.duration,
+//             COUNT(DISTINCT s.id) as total_students,
+//             COUNT(DISTINCT b.id) as total_batches,
+//             COUNT(DISTINCT e.id) as total_examinations
+//      FROM courses c
+//      LEFT JOIN students s ON s.course_id = c.id
+//      LEFT JOIN batches b ON b.course_id = c.id
+//      LEFT JOIN examinations e ON e.course_id = c.id
+//      GROUP BY c.id
+//      ORDER BY total_students DESC`
+//   );
 
-  // Batch-wise student distribution
-  const batchReports = await queryAll(
-    `SELECT b.id, b.batch_name, b.batch_code, b.timing, b.start_date, b.status,
-            c.course_name, u.name as trainer_name,
-            COUNT(s.id) as student_count,
-            (SELECT COUNT(*) FROM examinations e WHERE e.batch_id = b.id) as exam_count
-     FROM batches b
-     JOIN courses c ON b.course_id = c.id
-     JOIN users u ON b.trainer_id = u.id
-     LEFT JOIN students s ON s.batch_id = b.id
-     GROUP BY b.id
-     ORDER BY b.start_date DESC`
-  );
+//   // Batch-wise student distribution
+//   const batchReports = await queryAll(
+//     `SELECT b.id, b.batch_name, b.batch_code, b.timing, b.start_date, b.status,
+//             c.course_name, u.name as trainer_name,
+//             COUNT(s.id) as student_count,
+//             (SELECT COUNT(*) FROM examinations e WHERE e.batch_id = b.id) as exam_count
+//      FROM batches b
+//      JOIN courses c ON b.course_id = c.id
+//      JOIN users u ON b.trainer_id = u.id
+//      LEFT JOIN students s ON s.batch_id = b.id
+//      GROUP BY b.id
+//      ORDER BY b.start_date DESC`
+//   );
 
-  // Trainer-wise examination uploads
-  const trainerReports = await queryAll(
-    `SELECT u.id, u.name as trainer_name, u.email, u.mobile, u.status,
-            COUNT(DISTINCT b.id) as assigned_batches,
-            COUNT(DISTINCT e.id) as total_uploaded_exams,
-            MAX(e.created_at) as last_exam_upload
-     FROM users u
-     LEFT JOIN batches b ON b.trainer_id = u.id
-     LEFT JOIN examinations e ON e.trainer_id = u.id
-     JOIN roles r ON r.id = u.role_id
-     WHERE r.role_name = 'FACULTY'
-     GROUP BY u.id
-     ORDER BY total_uploaded_exams DESC`
-  );
+//   // Trainer-wise examination uploads
+//   const trainerReports = await queryAll(
+//     `SELECT u.id, u.name as trainer_name, u.email, u.mobile, u.status,
+//             COUNT(DISTINCT b.id) as assigned_batches,
+//             COUNT(DISTINCT e.id) as total_uploaded_exams,
+//             MAX(e.created_at) as last_exam_upload
+//      FROM users u
+//      LEFT JOIN batches b ON b.trainer_id = u.id
+//      LEFT JOIN examinations e ON e.trainer_id = u.id
+//      JOIN roles r ON r.id = u.role_id
+//      WHERE r.role_name = 'FACULTY'
+//      GROUP BY u.id
+//      ORDER BY total_uploaded_exams DESC`
+//   );
 
-  // Monthly examination uploads
-  const monthlyUploads = await queryAll(
-    `SELECT TO_CHAR(created_at, 'YYYY-MM') as month, COUNT(*) as count
-     FROM examinations
-     GROUP BY month
-     ORDER BY month DESC LIMIT 12`
-  );
+//   // Monthly examination uploads
+//   const monthlyUploads = await queryAll(
+//     `SELECT TO_CHAR(created_at, 'YYYY-MM') as month, COUNT(*) as count
+//      FROM examinations
+//      GROUP BY month
+//      ORDER BY month DESC LIMIT 12`
+//   );
 
-  res.json({
-    courseReports,
-    batchReports,
-    trainerReports,
-    monthlyUploads
-  });
-});
+//   res.json({
+//     courseReports,
+//     batchReports,
+//     trainerReports,
+//     monthlyUploads
+//   });
+// });
+
+apiRouter.get(
+  '/reports',
+  authenticateToken,
+  requireRole(['ADMIN', 'CENTER_MANAGER', 'TEAM_LEAD']),
+  async (_req, res) => {
+    try {
+      // Course-wise students and examinations
+      const courseReports = await queryAll(
+        `SELECT
+            c.id,
+            c.course_name,
+            c.course_code,
+            c.duration,
+            COUNT(DISTINCT s.id) AS total_students,
+            COUNT(DISTINCT b.id) AS total_batches,
+            COUNT(DISTINCT e.id) AS total_examinations
+         FROM courses c
+         LEFT JOIN students s ON s.course_id = c.id
+         LEFT JOIN batches b ON b.course_id = c.id
+         LEFT JOIN examinations e ON e.course_id = c.id
+         GROUP BY
+            c.id,
+            c.course_name,
+            c.course_code,
+            c.duration
+         ORDER BY total_students DESC`
+      );
+
+      // Batch-wise student distribution
+      const batchReports = await queryAll(
+        `SELECT
+            b.id,
+            b.batch_name,
+            b.batch_code,
+            b.timing,
+            b.start_date,
+            b.status,
+            c.course_name,
+            u.name AS trainer_name,
+            COUNT(DISTINCT s.id) AS student_count,
+            (
+              SELECT COUNT(*)
+              FROM examinations e
+              WHERE e.batch_id = b.id
+            ) AS exam_count
+         FROM batches b
+         JOIN courses c ON b.course_id = c.id
+         JOIN users u ON b.trainer_id = u.id
+         LEFT JOIN students s ON s.batch_id = b.id
+         GROUP BY
+            b.id,
+            b.batch_name,
+            b.batch_code,
+            b.timing,
+            b.start_date,
+            b.status,
+            c.course_name,
+            u.name
+         ORDER BY b.start_date DESC`
+      );
+
+      // Faculty-wise examination uploads
+      const trainerReports = await queryAll(
+        `SELECT
+            u.id,
+            u.name AS trainer_name,
+            u.email,
+            u.mobile,
+            u.status,
+            COUNT(DISTINCT b.id) AS assigned_batches,
+            COUNT(DISTINCT e.id) AS total_uploaded_exams,
+            MAX(e.created_at) AS last_exam_upload
+         FROM users u
+         LEFT JOIN batches b ON b.trainer_id = u.id
+         LEFT JOIN examinations e ON e.trainer_id = u.id
+         JOIN roles r ON r.id = u.role_id
+         WHERE r.role_name = 'FACULTY'
+         GROUP BY
+            u.id,
+            u.name,
+            u.email,
+            u.mobile,
+            u.status
+         ORDER BY total_uploaded_exams DESC`
+      );
+
+      // Monthly examination uploads
+      const monthlyUploads = await queryAll(
+        `SELECT
+            TO_CHAR(created_at, 'YYYY-MM') AS month,
+            COUNT(*) AS count
+         FROM examinations
+         GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+         ORDER BY TO_CHAR(created_at, 'YYYY-MM') DESC
+         LIMIT 12`
+      );
+
+      res.json({
+        courseReports,
+        batchReports,
+        trainerReports,
+        monthlyUploads
+      });
+    } catch (error) {
+      console.error('Failed to generate reports:', error);
+
+      res.status(500).json({
+        error: 'Failed to generate reports. Please check the backend logs.'
+      });
+    }
+  }
+);
+
