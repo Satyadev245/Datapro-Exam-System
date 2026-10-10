@@ -1453,8 +1453,27 @@ apiRouter.post('/public/online-exams/:token/submit', async (req, res) => {
     return;
   }
 
-  const startedMs = new Date(`${attempt.started_at.replace(' ', 'T')}Z`).getTime();
-  const expired = Date.now() >= startedMs + durationMinutesFromExam(a) * 60000;
+  const attemptStartedAt =
+    attempt.started_at instanceof Date
+      ? attempt.started_at
+      : new Date(attempt.started_at);
+
+  const startedMs = attemptStartedAt.getTime();
+
+  if (Number.isNaN(startedMs)) {
+    console.error(
+      'Invalid attempt.started_at timestamp:',
+      attempt.started_at
+    );
+    res.status(500).json({
+      error: 'Unable to validate the examination start time.'
+    });
+    return;
+  }
+
+  const expired =
+    Date.now() >= startedMs + durationMinutesFromExam(a) * 60_000;
+
   const autoSubmit = req.body?.auto_submit === true;
   const answers = req.body?.answers && typeof req.body.answers === 'object' ? req.body.answers : {};
   const questions = await queryAll<any>(
