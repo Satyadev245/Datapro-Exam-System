@@ -4,6 +4,8 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import cors from 'cors';
+
 import { getDb } from './server/db.js';
 import { apiRouter } from './server/api.js';
 
@@ -12,59 +14,79 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
+
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // CORS configuration
-  const configuredOrigins = [
-    'https://datapro-exam-system.netlify.app',
-    ...(process.env.CORS_ORIGINS || '')
-      .split(',')
-      .map((value) => value.trim().replace(/\/+$/, ''))
-      .filter(Boolean),
-    ...(process.env.APP_URL || '')
-      .split(',')
-      .map((value) => value.trim().replace(/\/+$/, ''))
-      .filter(Boolean),
-  ];
+  // Allowed frontend origins
+  const allowedOrigins = new Set(
+    [
+      'https://datapro-exam-system.netlify.app',
+      ...(process.env.CORS_ORIGINS || '')
+        .split(',')
+        .map((value) => value.trim().replace(/\/+$/, ''))
+        .filter(Boolean),
+      ...(process.env.APP_URL || '')
+        .split(',')
+        .map((value) => value.trim().replace(/\/+$/, ''))
+        .filter(Boolean),
+    ].filter(Boolean)
+  );
 
-  app.use((req, res, next) => {
-    const origin = String(req.headers.origin || '')
-      .trim()
-      .replace(/\/+$/, '');
+  // CORS must run before API routes.
+  app.use(
+    cors({
+      origin(origin, callback) {
+        // Allow requests without an Origin header, such as server-to-server calls.
+        if (!origin) {
+          return callback(null, true);
+        }
 
-    if (origin && configuredOrigins.includes(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Vary', 'Origin');
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Origin, X-Requested-With, Content-Type, Accept, Authorization'
-      );
-      res.setHeader(
-        'Access-Control-Allow-Methods',
-        'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'
-      );
-      res.setHeader('Access-Control-Max-Age', '86400');
-    }
+        const normalizedOrigin = origin.trim().replace(/\/+$/, '');
 
-    // Handle preflight before authentication and API routes.
-    if (req.method === 'OPTIONS') {
-      if (origin && !configuredOrigins.includes(origin)) {
-        return res.status(403).json({
-          error: 'Origin not allowed by CORS policy',
-        });
-      }
+        if (allowedOrigins.has(normalizedOrigin)) {
+          return callback(null, true);
+        }
 
-      return res.sendStatus(204);
-    }
-
-    next();
-  });
+        console.warn(`CORS origin rejected: ${normalizedOrigin}`);
+        return callback(new Error('Origin not allowed by CORS'));
+      },
+      methods: [
+        'GET',
+        'HEAD',
+        'POST',
+        'PUT',
+        'PATCH',
+        'DELETE',
+        'OPTIONS',
+      ],
+      allowedHeaders: [
+        'Origin',
+        'X-Requested-With',
+        'Content-Type',
+        'Accept',
+        'Authorization',
+      ],
+      credentials: true,
+      maxAge: 86400,
+      optionsSuccessStatus: 204,
+    })
+  );
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+  // Health check does not require a database query.
+  app.get('/api/health', (_req, res) => {
+    res.status(200).json({
+      status: 'healthy',
+      institute: 'DataPro Institute, Gajuwaka',
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Initialize PostgreSQL before registering application routes.
   console.log('Initializing PostgreSQL database...');
 
   try {
@@ -73,23 +95,16 @@ async function startServer() {
   } catch (err) {
     console.error('Database initialization failed:', err);
 
+    // Do not run an examination system with a failed database.
     if (isProduction) {
       process.exit(1);
     }
+
+    throw err;
   }
 
   // API routes
   app.use('/api', apiRouter);
-
-  // Health check
-  app.get('/api/health', (_req, res) => {
-    res.json({
-      status: 'healthy',
-      institute: 'DataPro Institute, Gajuwaka',
-      version: '1.0.0',
-      timestamp: new Date().toISOString(),
-    });
-  });
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
@@ -121,4 +136,3 @@ startServer().catch((err) => {
   console.error('Server startup error:', err);
   process.exit(1);
 });
-
