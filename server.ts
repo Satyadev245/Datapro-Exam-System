@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
@@ -14,24 +15,23 @@ async function startServer() {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // Production frontend is hosted on Netlify while this API runs on Render.
-  // Keep the allowed origin explicit instead of using wildcard CORS with credentials.
-  // CORS: allow the deployed Netlify frontend and any explicitly configured origins.
-  // Normalize trailing slashes so an accidental slash in Render variables does not break preflight.
+  // CORS configuration
   const configuredOrigins = [
-    'https://datapro-examination-system.netlify.app',
+    'https://datapro-exam-system.netlify.app',
     ...(process.env.CORS_ORIGINS || '')
       .split(',')
-      .map((value) => value.trim().replace(/\/$/, ''))
+      .map((value) => value.trim().replace(/\/+$/, ''))
       .filter(Boolean),
     ...(process.env.APP_URL || '')
       .split(',')
-      .map((value) => value.trim().replace(/\/$/, ''))
+      .map((value) => value.trim().replace(/\/+$/, ''))
       .filter(Boolean),
   ];
 
   app.use((req, res, next) => {
-    const origin = String(req.headers.origin || '').trim().replace(/\/$/, '');
+    const origin = String(req.headers.origin || '')
+      .trim()
+      .replace(/\/+$/, '');
 
     if (origin && configuredOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
@@ -43,61 +43,69 @@ async function startServer() {
       );
       res.setHeader(
         'Access-Control-Allow-Methods',
-        'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS'
+        'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'
       );
       res.setHeader('Access-Control-Max-Age', '86400');
     }
 
-    // Browser preflight requests must be completed before authentication/API routing.
+    // Handle preflight before authentication and API routes.
     if (req.method === 'OPTIONS') {
-      res.sendStatus(204);
-      return;
+      if (origin && !configuredOrigins.includes(origin)) {
+        return res.status(403).json({
+          error: 'Origin not allowed by CORS policy',
+        });
+      }
+
+      return res.sendStatus(204);
     }
 
     next();
   });
 
-  // Parse JSON and urlencoded requests
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-  console.log('🗄️ Initializing PostgreSQL database...');
+  console.log('Initializing PostgreSQL database...');
+
   try {
     await getDb();
-    console.log('✅ DataPro Institute PostgreSQL database connected and initialized.');
+    console.log('DataPro PostgreSQL database connected.');
   } catch (err) {
-    console.error('❌ Failed to initialize database:', err);
+    console.error('Database initialization failed:', err);
+
     if (isProduction) {
       process.exit(1);
     }
   }
 
-  // Mount REST APIs
+  // API routes
   app.use('/api', apiRouter);
 
-  // Health check endpoint
+  // Health check
   app.get('/api/health', (_req, res) => {
     res.json({
       status: 'healthy',
       institute: 'DataPro Institute, Gajuwaka',
       version: '1.0.0',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   });
 
   if (!isProduction) {
-    // Development mode: Vite middleware
     const { createServer: createViteServer } = await import('vite');
+
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
+
     app.use(vite.middlewares);
   } else {
-    // Production mode: Serve dist folder
     const distPath = path.resolve(__dirname, 'dist');
+
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
+
       app.get('*', (_req, res) => {
         res.sendFile(path.resolve(distPath, 'index.html'));
       });
@@ -105,10 +113,12 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 DataPro Examination Management Portal running at http://0.0.0.0:${PORT}`);
+    console.log(`DataPro backend listening on port ${PORT}`);
   });
 }
 
 startServer().catch((err) => {
   console.error('Server startup error:', err);
+  process.exit(1);
 });
+
